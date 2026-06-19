@@ -3,6 +3,12 @@
 This project turns a **Viewe 3.5" ESP32-S3 Board** (`UEDX32480035E-WB-A` v1.0, 320x480) into an ultra-sensitive seismograph, telemetry graph, and bubble level utilizing a **QMI8658 IMU** and LovyanGFX under ESP-IDF.
 
 ---
+![Display Ansicht 1](Pictures/1.jpg)
+![Display Ansicht 2](Pictures/2.jpg)
+![Display Ansicht 3](Pictures/3.jpg)
+![Display Ansicht 4](Pictures/4.jpg)
+
+
 
 ## 🔌 Hardware Pinout (Wiring Diagram)
 
