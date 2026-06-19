@@ -77,3 +77,4 @@ The board routes display, touch, and IMU peripherals to the ESP32-S3 as follows:
    * **Slider 1 (Alarm Threshold)**: Set alarm limit with milligravity precision (**`0.010 G` to `0.500 G`**).
    * **Slider 2 (Logarithmic GAIN)**: Adjust bubble level visual zoom sensitivity (`10.0` to `500.0`).
    * **Slider 3 (Filter Damping)**: Adjust the integration strength (`0%` to `100%`) of the seismic high-pass filter.
+ 
