@@ -2,6 +2,9 @@
 
 This project turns a **Viewe 3.5" ESP32-S3 Board** (`UEDX32480035E-WB-A` v1.0, 320x480) into an ultra-sensitive seismograph, telemetry graph, and bubble level utilizing a **QMI8658 IMU** and LovyanGFX under ESP-IDF.
 
+original Viewe Github
+https://github.com/VIEWESMART/UEDX24320028ESP32-3.5inch-320_480-Display/tree/main
+
 ---
 ![Display Ansicht 1](Pictures/1.jpg)
 ![Display Ansicht 2](Pictures/2.jpg)
@@ -36,6 +39,10 @@ The board routes display, touch, and IMU peripherals to the ESP32-S3 as follows:
 
 ### 4. IMU Sensor (QMI8658)
 * **I2C Address**: `0x6B` (primary) or `0x6A` (secondary fallback)
+
+### 5. Physical Signaling Peripherals
+* **Addressable WS2812B RGB LED**: `GPIO 0` (standard GRB color sequence)
+* **Low-Pitch Piezo Buzzer**: `GPIO 38` (driven via LEDC PWM Timer 1 / Channel 1 at 500 Hz)
 
 ---
 
@@ -83,4 +90,6 @@ The board routes display, touch, and IMU peripherals to the ESP32-S3 as follows:
    * **Slider 1 (Alarm Threshold)**: Set alarm limit with milligravity precision (**`0.010 G` to `0.500 G`**).
    * **Slider 2 (Logarithmic GAIN)**: Adjust bubble level visual zoom sensitivity (`10.0` to `500.0`).
    * **Slider 3 (Filter Damping)**: Adjust the integration strength (`0%` to `100%`) of the seismic high-pass filter.
+   * **LED Alert Checkbox**: Toggles the WS2812B alert (Green = Normal, Red = Alarm, Unchecked = Disabled/Dark). Enabled by default.
+   * **Buzzer Alert Checkbox**: Toggles the low-pitch pulsed alarm beep (500 Hz). Disabled by default.
  

@@ -1,7 +1,11 @@
 #define LGFX_USE_V1
 #include "driver/gpio.h"
 #include "driver/i2c.h"
+#include "driver/ledc.h"
 #include "esp_log.h"
+#include "esp_cpu.h"
+#include "rom/ets_sys.h"
+#include "soc/gpio_reg.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "qmi8658.hpp"
@@ -255,6 +259,8 @@ void calibrate_sensors(QMI8658 &imu) {
 float g_alarm_threshold = 0.05f; // 0.01G to 0.50G (highly sensitive)
 float g_gain_factor = 100.0f;    // 10.0 to 500.0
 int g_slider3_val = 50; // 0 to 100 (controls oversampling filter integration)
+bool g_led_alert_enabled = true;
+bool g_buzzer_alert_enabled = false;
 
 // Alarm status variables
 bool g_alarm_active = false;
@@ -345,6 +351,87 @@ void imu_sampling_task(void *pvParameters) {
   }
 }
 
+#define WS2812_PIN 0
+
+#define WS2812_HIGH() REG_WRITE(GPIO_OUT_W1TS_REG, (1 << WS2812_PIN))
+#define WS2812_LOW()  REG_WRITE(GPIO_OUT_W1TC_REG, (1 << WS2812_PIN))
+
+static portMUX_TYPE ws2812_mux = portMUX_INITIALIZER_UNLOCKED;
+
+static inline void ws2812_write_byte(uint8_t byte) {
+  for (int i = 0; i < 8; i++) {
+    if (byte & 0x80) {
+      WS2812_HIGH();
+      uint32_t start = esp_cpu_get_cycle_count();
+      while ((esp_cpu_get_cycle_count() - start) < 210) {}
+      WS2812_LOW();
+      start = esp_cpu_get_cycle_count();
+      while ((esp_cpu_get_cycle_count() - start) < 80) {}
+    } else {
+      WS2812_HIGH();
+      uint32_t start = esp_cpu_get_cycle_count();
+      while ((esp_cpu_get_cycle_count() - start) < 80) {}
+      WS2812_LOW();
+      start = esp_cpu_get_cycle_count();
+      while ((esp_cpu_get_cycle_count() - start) < 210) {}
+    }
+    byte <<= 1;
+  }
+}
+
+void ws2812_set_color(uint8_t r, uint8_t g, uint8_t b) {
+  taskENTER_CRITICAL(&ws2812_mux);
+  ws2812_write_byte(g); // WS2812 uses GRB
+  ws2812_write_byte(r);
+  ws2812_write_byte(b);
+  taskEXIT_CRITICAL(&ws2812_mux);
+  ets_delay_us(60);
+}
+
+#define BUZZER_PIN GPIO_NUM_38
+#define BUZZER_LEDC_CHANNEL LEDC_CHANNEL_1
+#define BUZZER_LEDC_TIMER LEDC_TIMER_1
+
+void buzzer_init() {
+  ledc_timer_config_t ledc_timer = {};
+  ledc_timer.speed_mode       = LEDC_LOW_SPEED_MODE;
+  ledc_timer.duty_resolution  = LEDC_TIMER_10_BIT;
+  ledc_timer.timer_num        = BUZZER_LEDC_TIMER;
+  ledc_timer.freq_hz          = 500; // pleasant low pitch
+  ledc_timer.clk_cfg          = LEDC_AUTO_CLK;
+  ledc_timer_config(&ledc_timer);
+
+  ledc_channel_config_t ledc_channel = {};
+  ledc_channel.gpio_num       = BUZZER_PIN;
+  ledc_channel.speed_mode     = LEDC_LOW_SPEED_MODE;
+  ledc_channel.channel        = BUZZER_LEDC_CHANNEL;
+  ledc_channel.intr_type      = LEDC_INTR_DISABLE;
+  ledc_channel.timer_sel      = BUZZER_LEDC_TIMER;
+  ledc_channel.duty           = 0;
+  ledc_channel.hpoint         = 0;
+  ledc_channel_config(&ledc_channel);
+}
+
+void buzzer_beep(bool on) {
+  if (on) {
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL, 512); // 50% duty
+  } else {
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL, 0); // off
+  }
+  ledc_update_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL);
+}
+
+void draw_checkbox(LGFX_Sprite *spr, int x, int y, const char *label, bool checked) {
+  spr->drawRect(x, y, 16, 16, TFT_WHITE);
+  if (checked) {
+    spr->fillRect(x + 3, y + 3, 10, 10, TFT_BLUE);
+  }
+  spr->setTextColor(TFT_WHITE);
+  spr->setTextSize(1);
+  spr->setTextDatum(textdatum_t::middle_left);
+  spr->drawString(label, x + 24, y + 8);
+}
+
 void draw_slider(LGFX_Sprite *spr, int x, int y, int w, float val,
                  float min_val, float max_val, const char *label,
                  const char *val_str) {
@@ -414,6 +501,19 @@ extern "C" void app_main(void) {
   int_gpio_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
   int_gpio_conf.pull_up_en = GPIO_PULLUP_ENABLE;
   gpio_config(&int_gpio_conf);
+
+  // Initialize GPIO 0 for WS2812B
+  gpio_config_t led_gpio_conf = {};
+  led_gpio_conf.intr_type = GPIO_INTR_DISABLE;
+  led_gpio_conf.mode = GPIO_MODE_OUTPUT;
+  led_gpio_conf.pin_bit_mask = (1ULL << GPIO_NUM_0);
+  led_gpio_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  led_gpio_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+  gpio_config(&led_gpio_conf);
+  ws2812_set_color(0, 255, 0); // Start Green
+
+  // Initialize Buzzer on GPIO 38
+  buzzer_init();
 
   // Initialize LovyanGFX Display
   lcd.init();
@@ -529,6 +629,12 @@ extern "C" void app_main(void) {
             g_gain_factor = 10.0f + pct * (500.0f - 10.0f);
           } else if (ty >= 205 && ty <= 235) { // Slider 3 (220 +- 15px)
             g_slider3_val = (int)(pct * 100);
+          } else if (ty >= 240 && ty <= 275) { // Checkboxes (250 +- 15px)
+            if (tx >= 50 && tx <= 220) {
+              g_led_alert_enabled = !g_led_alert_enabled;
+            } else if (tx >= 250 && tx <= 420) {
+              g_buzzer_alert_enabled = !g_buzzer_alert_enabled;
+            }
           }
         }
       }
@@ -580,6 +686,31 @@ extern "C" void app_main(void) {
           if (now - g_alarm_last_active_time >= 1000) {
             g_alarm_active = false;
           }
+        }
+
+        // Handle physical alarm signals (LED & Buzzer)
+        static int last_led_state = -1;
+        int target_led_state = 0; // 0 = Off, 1 = Green, 2 = Red
+        if (g_led_alert_enabled) {
+          target_led_state = g_alarm_active ? 2 : 1;
+        }
+
+        if (target_led_state != last_led_state) {
+          last_led_state = target_led_state;
+          if (target_led_state == 2) {
+            ws2812_set_color(255, 0, 0); // Red
+          } else if (target_led_state == 1) {
+            ws2812_set_color(0, 255, 0); // Green
+          } else {
+            ws2812_set_color(0, 0, 0);   // Off
+          }
+        }
+
+        if (g_alarm_active && g_buzzer_alert_enabled) {
+          bool beep_on = ((now / 200) % 2) == 0;
+          buzzer_beep(beep_on);
+        } else {
+          buzzer_beep(false);
         }
 
         sprite
@@ -733,13 +864,17 @@ extern "C" void app_main(void) {
           draw_slider(&sprite, 50, 180, 300, (float)g_slider3_val, 0.0f, 100.0f,
                       "Filter Damping", slider3_str);
 
+          // Draw settings checkboxes
+          draw_checkbox(&sprite, 80, 210, "LED Alert", g_led_alert_enabled);
+          draw_checkbox(&sprite, 260, 210, "Buzzer Alert", g_buzzer_alert_enabled);
+
           // Alarm status test text at the bottom
           sprite.setTextColor(g_alarm_active ? TFT_RED : TFT_GREEN);
           sprite.setTextSize(2);
           sprite.setTextDatum(textdatum_t::middle_center);
           sprite.drawString(g_alarm_active ? "TEST: ALARM IN ACTION"
                                            : "TEST: SYSTEM STILL",
-                            240, 240);
+                            240, 248);
         }
 
         sprite.pushSprite(
