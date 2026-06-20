@@ -257,6 +257,7 @@ void calibrate_sensors(QMI8658 &imu) {
 // Settings values
 // Settings values
 float g_alarm_threshold = 0.05f; // 0.01G to 0.50G (highly sensitive)
+float g_alarm_threshold_dps = 5.0f; // 1.0 to 50.0 dps
 float g_gain_factor = 100.0f;    // 10.0 to 500.0
 int g_slider3_val = 50; // 0 to 100 (controls oversampling filter integration)
 bool g_led_alert_enabled = true;
@@ -622,14 +623,15 @@ extern "C" void app_main(void) {
             cx = slider_x + slider_w;
           float pct = (float)(cx - slider_x) / slider_w;
 
-          if (ty >= 85 &&
-              ty <= 115) { // Slider 1 (100 +- 15px) - 0.01G to 0.50G
+          if (ty >= 65 && ty <= 95) { // Slider 1 (80 +- 15px) - 0.01G to 0.50G
             g_alarm_threshold = 0.01f + pct * (0.50f - 0.01f);
-          } else if (ty >= 145 && ty <= 175) { // Slider 2 (160 +- 15px)
+          } else if (ty >= 120 && ty <= 150) { // Slider 2 (135 +- 15px) - 1.0 to 50.0 DPS
+            g_alarm_threshold_dps = 1.0f + pct * (50.0f - 1.0f);
+          } else if (ty >= 175 && ty <= 205) { // Slider 3 (190 +- 15px) - 10.0 to 500.0 GAIN
             g_gain_factor = 10.0f + pct * (500.0f - 10.0f);
-          } else if (ty >= 205 && ty <= 235) { // Slider 3 (220 +- 15px)
+          } else if (ty >= 230 && ty <= 260) { // Slider 4 (245 +- 15px) - 0% to 100%
             g_slider3_val = (int)(pct * 100);
-          } else if (ty >= 240 && ty <= 275) { // Checkboxes (250 +- 15px)
+          } else if (ty >= 270 && ty <= 305) { // Checkboxes (285 +- 15/20px)
             if (tx >= 50 && tx <= 220) {
               g_led_alert_enabled = !g_led_alert_enabled;
             } else if (tx >= 250 && tx <= 420) {
@@ -651,11 +653,13 @@ extern "C" void app_main(void) {
         cx = slider_x + slider_w;
       float pct = (float)(cx - slider_x) / slider_w;
 
-      if (ty >= 85 && ty <= 115) {
+      if (ty >= 65 && ty <= 95) {
         g_alarm_threshold = 0.01f + pct * (0.50f - 0.01f);
-      } else if (ty >= 145 && ty <= 175) {
+      } else if (ty >= 120 && ty <= 150) {
+        g_alarm_threshold_dps = 1.0f + pct * (50.0f - 1.0f);
+      } else if (ty >= 175 && ty <= 205) {
         g_gain_factor = 10.0f + pct * (500.0f - 10.0f);
-      } else if (ty >= 205 && ty <= 235) {
+      } else if (ty >= 230 && ty <= 260) {
         g_slider3_val = (int)(pct * 100);
       }
     }
@@ -676,8 +680,7 @@ extern "C" void app_main(void) {
         float dev_gyro = g_vibration_gyro;
 
         // Trigger alarm if dynamic AC vibration exceeds the threshold
-        // Gyro threshold is 5.0 dps (very sensitive for seismic detection)
-        bool triggered = (dev_acc > g_alarm_threshold) || (dev_gyro > 5.0f);
+        bool triggered = (dev_acc > g_alarm_threshold) || (dev_gyro > g_alarm_threshold_dps);
         if (triggered) {
           g_alarm_active = true;
           g_alarm_last_active_time = now;
@@ -849,32 +852,44 @@ extern "C" void app_main(void) {
           char slider1_str[32];
           snprintf(slider1_str, sizeof(slider1_str), "%.3f G",
                    g_alarm_threshold);
-          draw_slider(&sprite, 50, 60, 300, g_alarm_threshold, 0.01f, 0.50f,
+          draw_slider(&sprite, 50, 40, 300, g_alarm_threshold, 0.01f, 0.50f,
                       "Alarm Threshold", slider1_str);
 
-          // Slider 2: GAIN Factor (10.0 to 500.0)
+          // Slider 2: Alarm Threshold (1.0 to 50.0 DPS)
           char slider2_str[32];
-          snprintf(slider2_str, sizeof(slider2_str), "%.1f", g_gain_factor);
-          draw_slider(&sprite, 50, 120, 300, g_gain_factor, 10.0f, 500.0f,
-                      "Logarithmic GAIN", slider2_str);
+          snprintf(slider2_str, sizeof(slider2_str), "%.1f DPS",
+                   g_alarm_threshold_dps);
+          draw_slider(&sprite, 50, 95, 300, g_alarm_threshold_dps, 1.0f, 50.0f,
+                      "Alarm Threshold", slider2_str);
 
-          // Slider 3: Seismic Filter Damping (0% to 100%)
+          // Slider 3: GAIN Factor (10.0 to 500.0)
           char slider3_str[32];
-          snprintf(slider3_str, sizeof(slider3_str), "%d %%", g_slider3_val);
-          draw_slider(&sprite, 50, 180, 300, (float)g_slider3_val, 0.0f, 100.0f,
-                      "Filter Damping", slider3_str);
+          snprintf(slider3_str, sizeof(slider3_str), "%.1f", g_gain_factor);
+          draw_slider(&sprite, 50, 150, 300, g_gain_factor, 10.0f, 500.0f,
+                      "Logarithmic GAIN", slider3_str);
+
+          // Slider 4: Seismic Filter Damping (0% to 100%)
+          char slider4_str[32];
+          snprintf(slider4_str, sizeof(slider4_str), "%d %%", g_slider3_val);
+          draw_slider(&sprite, 50, 205, 300, (float)g_slider3_val, 0.0f, 100.0f,
+                      "Filter Damping", slider4_str);
 
           // Draw settings checkboxes
-          draw_checkbox(&sprite, 80, 210, "LED Alert", g_led_alert_enabled);
-          draw_checkbox(&sprite, 260, 210, "Buzzer Alert", g_buzzer_alert_enabled);
+          draw_checkbox(&sprite, 80, 245, "LED Alert", g_led_alert_enabled);
+          draw_checkbox(&sprite, 260, 245, "Buzzer Alert", g_buzzer_alert_enabled);
 
-          // Alarm status test text at the bottom
-          sprite.setTextColor(g_alarm_active ? TFT_RED : TFT_GREEN);
+          // Draw vertical ALARM status sprite on the right
+          uint32_t alarm_color = g_alarm_active ? TFT_RED : TFT_GREEN;
+          sprite.fillRoundRect(400, 40, 40, 180, 5, alarm_color);
+          sprite.drawRoundRect(400, 40, 40, 180, 5, TFT_WHITE);
+          sprite.setTextColor(TFT_WHITE);
           sprite.setTextSize(2);
-          sprite.setTextDatum(textdatum_t::middle_center);
-          sprite.drawString(g_alarm_active ? "TEST: ALARM IN ACTION"
-                                           : "TEST: SYSTEM STILL",
-                            240, 248);
+          sprite.setTextDatum(textdatum_t::top_center);
+          sprite.drawString("A", 420, 50);
+          sprite.drawString("L", 420, 80);
+          sprite.drawString("A", 420, 110);
+          sprite.drawString("R", 420, 140);
+          sprite.drawString("M", 420, 170);
         }
 
         sprite.pushSprite(
