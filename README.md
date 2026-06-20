@@ -77,7 +77,7 @@ The board routes display, touch, and IMU peripherals to the ESP32-S3 as follows:
 
 ### 5. Advanced UI Dragging (Clamping & Precise Heights)
 * **Page Toggle**: Tap the header ($Y < 40$) to loop through pages.
-* **Slider Tracking**: Target zones are mapped precisely around the visual centers ($100$, $160$, $220$) at $\pm 15$ pixels to avoid dead zones.
+* **Slider Tracking**: Target zones are mapped precisely around the visual centers of the four sliders at $\pm 15$ pixels to avoid dead zones.
 * **Horizontal Clamping**: Dragging coordinates $tx$ are geoclamped to the track width ($50$ to $350$). Even if you drag your finger off the slider horizontally, it stays locked and smoothly limits to $0\%$ or $100\%$.
 
 ---
@@ -87,9 +87,10 @@ The board routes display, touch, and IMU peripherals to the ESP32-S3 as follows:
 1. **Page 0 (Bubble Level)**: High-resolution log-scaled accelerometer and gyroscope level circles. The center displays a vertical visual ALARM bar.
 2. **Page 1 (Graphs)**: Real-time AC vibration bar graphs for X, Y, Z axes, with a large horizontal "ALARM TRIGGERED / SYSTEM OK" status bar.
 3. **Page 2 (Settings)**:
-   * **Slider 1 (Alarm Threshold)**: Set alarm limit with milligravity precision (**`0.010 G` to `0.500 G`**).
-   * **Slider 2 (Logarithmic GAIN)**: Adjust bubble level visual zoom sensitivity (`10.0` to `500.0`).
-   * **Slider 3 (Filter Damping)**: Adjust the integration strength (`0%` to `100%`) of the seismic high-pass filter.
+   * **Slider 1 (Alarm Threshold - G)**: Set accelerometer alarm limit with milligravity precision (**`0.010 G` to `0.500 G`**).
+   * **Slider 2 (Alarm Threshold - DPS)**: Set gyroscope alarm limit with degrees per second precision (**`1.0 DPS` to `50.0 DPS`**).
+   * **Slider 3 (Logarithmic GAIN)**: Adjust bubble level visual zoom sensitivity (`10.0` to `500.0`).
+   * **Slider 4 (Filter Damping)**: Adjust the integration strength (`0%` to `100%`) of the seismic high-pass filter.
    * **LED Alert Checkbox**: Toggles the WS2812B alert (Green = Normal, Red = Alarm, Unchecked = Disabled/Dark). Enabled by default.
    * **Buzzer Alert Checkbox**: Toggles the low-pitch pulsed alarm beep (500 Hz). Disabled by default.
  
